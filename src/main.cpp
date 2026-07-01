@@ -1,115 +1,98 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiClientSecure.h>  
-#include <PubSubClient.h>
+#include <SoftwareSerial.h>
+#include <TMCStepper.h>
+#include <AccelStepper.h>
 
-// --- Configuration ---
-const char* ssid = "Galaxy A15 5G 675D";
-const char* password = "12345677";
+// --- PIN DEFINITIONS ---
+#define SW_RX            4
+#define SW_TX            5
+#define STEP_PIN         10
+#define DIR_PIN          11
 
-// HiveMQ Cluster URL (do not include "mqtt://" or ports, just the address)
-const char* mqtt_server = "9ce40a1f20ae4e5da0c2940b2d57cb53.s1.eu.hivemq.cloud"; 
-const int mqtt_port = 8883; // 8883 is standard for secure SSL connections
-const char* mqtt_user = "suboda";
-const char* mqtt_password = "moMO1299do@";
 
-// MQTT Topics
-const char* subscribe_topic = "esp32/output";
-const char* publish_topic = "esp32/status";
+#define R_SENSE 0.11f      
 
-const int ledPin = 2; // GPIO Pin for the onboard LED
+SoftwareSerial SoftSerial(SW_RX, SW_TX);
+TMC2208Stepper driver(&SoftSerial, R_SENSE);
+AccelStepper stepper(1, STEP_PIN, DIR_PIN);
 
-WiFiClientSecure espClient; // Use WiFiClientSecure for HiveMQ Cloud (SSL)
-PubSubClient client(espClient);
-
-// --- Functions ---
-
-void setup_wifi() {
-  delay(10);
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-}
-
-// This function executes when a message arrives from the broker
-void callback(char* topic, byte* message, unsigned int length) {
-  Serial.print("Message arrived on topic: ");
-  Serial.print(topic);
-  Serial.print(". Message: ");
-  
-  String messageTemp;
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)message[i]);
-    messageTemp += (char)message[i];
-  }
-  Serial.println();
-
-  // If a message is received on the topic, check if the message is "on" or "off"
-  if (String(topic) == subscribe_topic) {
-    if (messageTemp == "on") {
-      Serial.println("Turning LED ON");
-      digitalWrite(ledPin, HIGH);
-      client.publish(publish_topic, "LED is now ON");
-    } else if (messageTemp == "off") {
-      Serial.println("Turning LED OFF");
-      digitalWrite(ledPin, LOW);
-      client.publish(publish_topic, "LED is now OFF");
-    }
-  }
-}
-
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    
-    // Create a unique client ID using a random number to avoid broker conflicts
-    String clientId = "ESP32Client-";
-    clientId += String(random(0, 0xffff), HEX);
-    
-    // Attempt to connect
-    if (client.connect(clientId.c_str(), mqtt_user, mqtt_password)) {
-      Serial.println("connected");
-      // Subscribe to the control topic
-      client.subscribe(subscribe_topic);
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      delay(5000);
-    }
-  }
-}
+// A variable to keep track of our current mode
+bool isStealthChop = true; 
 
 void setup() {
   Serial.begin(9600);
-  pinMode(ledPin, OUTPUT);
+  SoftSerial.begin(115200);
+
+  // Initialize TMC2208 via UART
+  driver.begin();
+  driver.toff(5);                 
+  driver.rms_current(735);        
+  driver.microsteps(16);          
   
-  setup_wifi();
-  
-  // HiveMQ Cloud requires a secure connection. 
-  // espClient.setInsecure() skips checking the root certificate chain for testing simplicity.
-  espClient.setInsecure(); 
-  
-  client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(callback);
+  // Turn on StealthChop (Quiet Mode) by default
+  driver.en_spreadCycle(false); 
+  driver.pwm_autoscale(true); // Required for StealthChop to work properly
+
+  // Setup Movement
+  stepper.setMaxSpeed(2000.0);     
+  stepper.setAcceleration(1000.0); 
+
+  // Print our menu to the Serial Monitor
+  Serial.println("--- TMC2208 COMMAND CENTER ---");
+  Serial.println("Send '1' to Toggle StealthChop / SpreadCycle");
+  Serial.println("Send '2' to Print Live Diagnostics");
+  Serial.println("------------------------------");
 }
 
 void loop() {
-  if (!client.connected()) {
-    reconnect();
+  // --- 1. KEEP THE MOTOR MOVING ---
+  if (stepper.distanceToGo() == 0) {
+    if (stepper.currentPosition() == 0) {
+      stepper.moveTo(3200); 
+    } else {
+      stepper.moveTo(0);    
+    }
   }
-  client.loop(); // Keeps the MQTT connection alive and processes incoming packets
+  stepper.run(); 
+
+  // --- 2. LISTEN FOR YOUR COMMANDS ---
+  // If you type something in the Serial Monitor...
+  if (Serial.available() > 0) {
+    char inChar = Serial.read(); // Read the character you typed
+    
+    // Feature 1: The Silence Test
+    if (inChar == '1') {
+      isStealthChop = !isStealthChop; // Flip the variable
+      
+      // driver.en_spreadCycle(false) = StealthChop (Quiet)
+      // driver.en_spreadCycle(true)  = SpreadCycle (Loud/High Torque)
+      driver.en_spreadCycle(!isStealthChop); 
+      
+      Serial.print("Mode changed to: ");
+      Serial.println(isStealthChop ? "StealthChop (Ultra-Quiet)" : "SpreadCycle (Loud / High Torque)");
+    } 
+    
+    // Feature 2: Live Diagnostics
+    else if (inChar == '2') {
+      Serial.println("\n--- Live Driver Health ---");
+      
+      // Check if StealthChop is actually engaged in the hardware
+      Serial.print("StealthChop Active? ");
+      Serial.println(driver.stealth() ? "YES" : "NO");
+
+      // Check current draw scaling (0 to 31). 
+      // This shows how hard the driver is working to push the motor.
+      Serial.print("Current Scaling (0-31): ");
+      Serial.println(driver.cs_actual());
+
+      // Temperature Warnings (Crucial for 3D printers)
+      Serial.print("Over-Temperature Pre-Warning? ");
+      Serial.println(driver.otpw() ? "YES (It is getting hot!)" : "NO (Temps are good)");
+      
+      Serial.print("Over-Temperature Error? ");
+      Serial.println(driver.ot() ? "YES (Shutting down!)" : "NO (All clear)");
+      
+      Serial.println("--------------------------\n");
+    }
+  }
 }
