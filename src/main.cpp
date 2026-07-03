@@ -1,98 +1,105 @@
 #include <Arduino.h>
-#include <SoftwareSerial.h>
-#include <TMCStepper.h>
-#include <AccelStepper.h>
+#include <WiFi.h>
+#include <ArduinoOTA.h>
 
-// --- PIN DEFINITIONS ---
-#define SW_RX            4
-#define SW_TX            5
-#define STEP_PIN         10
-#define DIR_PIN          11
+// --- Fill these in ---
+const char* WIFI_SSID     = "G";
+const char* WIFI_PASSWORD = "12345677";
+const char* OTA_PASSWORD  = "esp32ota";
 
+WiFiServer TelnetServer(23);
+WiFiClient TelnetClient;
 
-#define R_SENSE 0.11f      
+unsigned long lastPrint = 0;
+int counter = 0;
 
-SoftwareSerial SoftSerial(SW_RX, SW_TX);
-TMC2208Stepper driver(&SoftSerial, R_SENSE);
-AccelStepper stepper(1, STEP_PIN, DIR_PIN);
+// --- Helper functions so printing feels just like Serial.print ---
+void tPrint(const String &s) {
+  if (TelnetClient && TelnetClient.connected()) TelnetClient.print(s);
+}
+void tPrintln(const String &s) {
+  if (TelnetClient && TelnetClient.connected()) TelnetClient.println(s);
+}
 
-// A variable to keep track of our current mode
-bool isStealthChop = true; 
+void handleTelnetClient() {
+  if (TelnetServer.hasClient()) {
+    if (!TelnetClient || !TelnetClient.connected()) {
+      if (TelnetClient) TelnetClient.stop();
+      TelnetClient = TelnetServer.available();
+      TelnetClient.println("Connected to ESP32 over WiFi!");
+    } else {
+      TelnetServer.available().stop(); // reject a 2nd simultaneous client
+    }
+  }
+}
+
+String wifiStatusToString(wl_status_t status) {
+  switch (status) {
+    case WL_IDLE_STATUS:     return "IDLE";
+    case WL_NO_SSID_AVAIL:   return "NO_SSID_AVAIL (network not found)";
+    case WL_CONNECTED:       return "CONNECTED";
+    case WL_CONNECT_FAILED:  return "CONNECT_FAILED (wrong password)";
+    case WL_CONNECTION_LOST: return "CONNECTION_LOST";
+    case WL_DISCONNECTED:    return "DISCONNECTED";
+    default:                 return "UNKNOWN (" + String(status) + ")";
+  }
+}
+
+void connectToWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);      // disable WiFi power-save — helps with phone hotspots
+  WiFi.disconnect(true);
+  delay(500);
+
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 3) {
+    Serial.println("Connection attempt " + String(attempts + 1) + " of 3...");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+      delay(300);
+      Serial.print(".");
+    }
+    Serial.println();
+    attempts++;
+  }
+
+  Serial.println("Final status: " + wifiStatusToString(WiFi.status()));
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.println("Copy this IP into platformio.ini, then unplug USB and go wireless.");
+  } else {
+    Serial.println("WiFi FAILED after 3 attempts. Check hotspot settings / phone approval prompt.");
+  }
+}
 
 void setup() {
-  Serial.begin(9600);
-  SoftSerial.begin(115200);
+  Serial.begin(115200);
+  delay(1000);
+  Serial.println();
+  Serial.println("=== ESP32 WiFi Setup ===");
 
-  // Initialize TMC2208 via UART
-  driver.begin();
-  driver.toff(5);                 
-  driver.rms_current(735);        
-  driver.microsteps(16);          
-  
-  // Turn on StealthChop (Quiet Mode) by default
-  driver.en_spreadCycle(false); 
-  driver.pwm_autoscale(true); // Required for StealthChop to work properly
+  connectToWiFi();
 
-  // Setup Movement
-  stepper.setMaxSpeed(2000.0);     
-  stepper.setAcceleration(1000.0); 
+  // --- Start OTA (wireless upload listener) ---
+  ArduinoOTA.setHostname("esp32-test");
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+  ArduinoOTA.begin();
 
-  // Print our menu to the Serial Monitor
-  Serial.println("--- TMC2208 COMMAND CENTER ---");
-  Serial.println("Send '1' to Toggle StealthChop / SpreadCycle");
-  Serial.println("Send '2' to Print Live Diagnostics");
-  Serial.println("------------------------------");
+  // --- Start Telnet server (wireless "Serial Monitor") ---
+  TelnetServer.begin();
+  TelnetServer.setNoDelay(true);
 }
 
 void loop() {
-  // --- 1. KEEP THE MOTOR MOVING ---
-  if (stepper.distanceToGo() == 0) {
-    if (stepper.currentPosition() == 0) {
-      stepper.moveTo(3200); 
-    } else {
-      stepper.moveTo(0);    
-    }
-  }
-  stepper.run(); 
+  ArduinoOTA.handle();     // must run constantly to catch incoming uploads
+  handleTelnetClient();    // manage the Telnet connection
 
-  // --- 2. LISTEN FOR YOUR COMMANDS ---
-  // If you type something in the Serial Monitor...
-  if (Serial.available() > 0) {
-    char inChar = Serial.read(); // Read the character you typed
-    
-    // Feature 1: The Silence Test
-    if (inChar == '1') {
-      isStealthChop = !isStealthChop; // Flip the variable
-      
-      // driver.en_spreadCycle(false) = StealthChop (Quiet)
-      // driver.en_spreadCycle(true)  = SpreadCycle (Loud/High Torque)
-      driver.en_spreadCycle(!isStealthChop); 
-      
-      Serial.print("Mode changed to: ");
-      Serial.println(isStealthChop ? "StealthChop (Ultra-Quiet)" : "SpreadCycle (Loud / High Torque)");
-    } 
-    
-    // Feature 2: Live Diagnostics
-    else if (inChar == '2') {
-      Serial.println("\n--- Live Driver Health ---");
-      
-      // Check if StealthChop is actually engaged in the hardware
-      Serial.print("StealthChop Active? ");
-      Serial.println(driver.stealth() ? "YES" : "NO");
-
-      // Check current draw scaling (0 to 31). 
-      // This shows how hard the driver is working to push the motor.
-      Serial.print("Current Scaling (0-31): ");
-      Serial.println(driver.cs_actual());
-
-      // Temperature Warnings (Crucial for 3D printers)
-      Serial.print("Over-Temperature Pre-Warning? ");
-      Serial.println(driver.otpw() ? "YES (It is getting hot!)" : "NO (Temps are good)");
-      
-      Serial.print("Over-Temperature Error? ");
-      Serial.println(driver.ot() ? "YES (Shutting down!)" : "NO (All clear)");
-      
-      Serial.println("--------------------------\n");
-    }
+  if (millis() - lastPrint > 1000) {
+    lastPrint = millis();
+    tPrintln("Heartbeat #" + String(counter++) + "  (uptime: " + String(millis()/1000) + "s)");
   }
 }
