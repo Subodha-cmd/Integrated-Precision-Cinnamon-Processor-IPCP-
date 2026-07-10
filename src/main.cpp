@@ -58,7 +58,7 @@ bool jawTouchCondition() {
 // ------------------------------------------------------------
 // OLED helpers
 // ------------------------------------------------------------
-void oledMessage(const String &line1, const String &line2 = "", int textSize = 1) {
+void oledMessage(const String &line1, const String &line2 = "", const String &line3 = "", int textSize = 2) {
   if (!oledReady) return;
   display.clearDisplay();
   display.setTextSize(textSize);
@@ -68,9 +68,11 @@ void oledMessage(const String &line1, const String &line2 = "", int textSize = 1
   if (line2.length() > 0) {
     display.println(line2);
   }
+  if (line3.length() > 0) {
+    display.println(line3);
+  }
   display.display();
 }
-
 // ------------------------------------------------------------
 // gradeFromDiameter()
 // Implements the grading table from your notes exactly.
@@ -105,7 +107,7 @@ void setup() {
     Serial.println("WARNING: OLED init failed! Continuing without display.");
   }
 
-  oledMessage("Initializing", "", 1);
+  oledMessage("Initializing", "","", 2);
   Serial.println("=== Cinnamon Grading Device ===");
   Serial.println("Initializing...");
 
@@ -131,7 +133,7 @@ void setup() {
     homed = jaw.home(600);
     if (!homed) {
       Serial.println("HOMING FAILED - retrying in 2s. Check load cell 2 / wiring.");
-      oledMessage("Homing Error", "Retrying...", 1);
+      oledMessage("Homing Error", "Retrying...","", 2);
       delay(2000);
     }
   }
@@ -147,7 +149,7 @@ void setup() {
 // ------------------------------------------------------------
 void loop() {
   // --- 1. Wait for a cinnamon stick to be placed ---
-  oledMessage("Place the", "cinnamon", 2);
+  oledMessage("Place the", "cinnamon","", 2);
   Serial.println("Waiting for cinnamon placement...");
 
   while (!loadCell1.load_on_cell()) {
@@ -164,7 +166,7 @@ void loop() {
   Serial.println(" g");
 
   // --- 3. Close the jaw until it touches the cinnamon (grip sensor) ---
-  oledMessage("Measuring...", "", 2);
+  oledMessage("Measuring...", "","", 2);
   long stepsLeft = jaw.checkClose();
   Serial.print("checkClose() steps left: ");
   Serial.println(stepsLeft);
@@ -179,8 +181,8 @@ void loop() {
   Serial.println(grade);
 
   // --- 5. Show the result ---
-  oledMessage("Grade: " + grade,
-              String(weight, 2) + "g  " + String(diameterMM) + "mm",
+  oledMessage("Grade:" + grade,
+              String(weight, 2) + "g " , String(diameterMM) + "mm",
               2);
   Serial.println("Result displayed.");
   delay(1000);
