@@ -33,7 +33,7 @@ class JawController {
     // and OPEN_POSITION is derived from it using stepsBetweenPositions.
     // Returns true if homing succeeded, false if it hit the safety step limit
     // without the condition ever triggering (sensor fault / wiring issue).
-    bool home(int homingSpeed = 200, int maxStepsMultiplier = 2);
+    bool home(int homingSpeed = 200, int maxStepsMultiplier = 2, int checkEveryNSteps = 4);
 
     // Moves to the open position and blocks until arrived.
     void openJaw();
@@ -44,7 +44,7 @@ class JawController {
     // Opens fully, then steps toward closed one microstep at a time,
     // checking the condition callback after every step.
     // Returns steps remaining if triggered early, or 0 if fully closed.
-    long checkClose();
+    long checkClose(int checkEveryNSteps = 4);
 
     // Manual jog helpers, useful for calibration via Serial commands.
     void jogOpen(int steps = 50);

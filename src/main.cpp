@@ -37,7 +37,7 @@
 #define LOADCELL1_THRESHOLD_G     6.2    // presence/weight threshold
 #define LOADCELL2_THRESHOLD_G     20.0    // grip-contact threshold
 
-#define STEPS_PER_MM  10.0   // <-- X from your notes. HARD-CODED, must be calibrated for real mechanism.
+#define STEPS_PER_MM  10.54   // <-- X from your notes. HARD-CODED, must be calibrated for real mechanism.
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 bool oledReady = false;
@@ -52,7 +52,7 @@ LoadCellSensor loadCell2(HX711_2_DOUT, HX711_2_SCK);
 // GRIP sensor (load cell 2) — this is what tells the jaw "you just
 // touched something, stop closing."
 bool jawTouchCondition() {
-  return loadCell2.load_on_cell();
+  return loadCell2.load_on_cell_fast();   // fast path during motion
 }
 
 // ------------------------------------------------------------
@@ -128,7 +128,7 @@ void setup() {
   Serial.println("Homing...");
   bool homed = false;
   while (!homed) {
-    homed = jaw.home();
+    homed = jaw.home(600);
     if (!homed) {
       Serial.println("HOMING FAILED - retrying in 2s. Check load cell 2 / wiring.");
       oledMessage("Homing Error", "Retrying...", 1);
@@ -179,7 +179,9 @@ void loop() {
   Serial.println(grade);
 
   // --- 5. Show the result ---
-  oledMessage("Grade: " + grade, String(weight, 2) + " g", 1);
+  oledMessage("Grade: " + grade,
+              String(weight, 2) + "g  " + String(stepsLeft) + "st",
+              2);
   Serial.println("Result displayed.");
   delay(1000);
 

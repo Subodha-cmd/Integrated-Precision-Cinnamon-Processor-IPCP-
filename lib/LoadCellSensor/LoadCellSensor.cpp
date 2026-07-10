@@ -45,6 +45,12 @@ bool LoadCellSensor::load_on_cell() {
   return (load_value() > _thresholdGrams);
 }
 
+bool LoadCellSensor::load_on_cell_fast() {
+  if (!_scale.is_ready()) return false;   // don't block if a conversion isn't ready yet
+  float grams = _scale.get_units(1);      // single sample instead of 5 — ~100ms instead of ~500ms
+  return (grams > _thresholdGrams);
+}
+
 void LoadCellSensor::tare() {
   _scale.tare();
 }

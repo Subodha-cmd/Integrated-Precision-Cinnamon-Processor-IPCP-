@@ -24,6 +24,8 @@ class LoadCellSensor {
     // Returns true if the current load exceeds the calibrated threshold.
     bool load_on_cell();
 
+    bool load_on_cell_fast();   // single-sample version, for use during stepping/homing
+
     // Re-zeros the scale at its current (assumed empty) state.
     void tare();
 
@@ -31,6 +33,8 @@ class LoadCellSensor {
     // Prints the raw reading to Serial, for use during the one-time
     // calibration process (see explanation in chat / README).
     long getRawReading();
+
+    
 
   private:
     HX711  _scale;

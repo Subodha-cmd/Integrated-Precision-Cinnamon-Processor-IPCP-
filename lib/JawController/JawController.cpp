@@ -48,43 +48,31 @@ void JawController::stepOnce(int direction) {
   }
 }
 
-bool JawController::home(int homingSpeed, int maxStepsMultiplier) {
-  if (_conditionCallback == nullptr) {
-    // No sensor logic attached — homing would run forever with nothing
-    // to stop it, so refuse outright rather than risk grinding the mechanism.
-    return false;
-  }
+bool JawController::home(int homingSpeed, int maxStepsMultiplier, int checkEveryNSteps) {
+  if (_conditionCallback == nullptr) return false;
 
   long maxHomingSteps = _stepsBetweenPositions * maxStepsMultiplier;
-
-  _stepper.setMaxSpeed(homingSpeed);   // slow, controlled speed specifically for homing
+  _stepper.setMaxSpeed(homingSpeed);
 
   long stepsTaken = 0;
   bool triggered = false;
 
   while (!triggered && stepsTaken < maxHomingSteps) {
-    stepOnce(1);   // one step in the CLOSE direction
+    stepOnce(1);
     stepsTaken++;
 
-    if (_conditionCallback()) {
-      triggered = true;
+    if (stepsTaken % checkEveryNSteps == 0) {   // only poll the sensor every N steps
+      if (_conditionCallback()) triggered = true;
     }
   }
 
-  _stepper.setMaxSpeed(_normalMaxSpeed);   // restore normal speed regardless of outcome
+  _stepper.setMaxSpeed(_normalMaxSpeed);
 
-  if (!triggered) {
-    _homed = false;
-    return false;   // safety abort — condition never fired within the allowed range
-  }
+  if (!triggered) { _homed = false; return false; }
 
-  // This physical spot is now our verified closed reference.
-  // We pick 0 as an arbitrary internal reference for "closed" — the exact
-  // number doesn't matter, only its distance to "open" does.
   _closedPosition = 0;
   _stepper.setCurrentPosition(_closedPosition);
   _openPosition = _closedPosition - _stepsBetweenPositions;
-
   _homed = true;
   return true;
 }
@@ -103,24 +91,25 @@ void JawController::closeJaw() {
   }
 }
 
-long JawController::checkClose() {
-  if (_conditionCallback == nullptr) {
-    return -1;   // no sensor attached — caller should check for this error case
-  }
+long JawController::checkClose(int checkEveryNSteps) {
+  if (_conditionCallback == nullptr) return -1;
 
-  openJaw();   // always start from the known, fully-open reference point
-
+  openJaw();
   int direction = (_closedPosition > _openPosition) ? 1 : -1;
+  long stepsTaken = 0;
 
   while (_stepper.currentPosition() != _closedPosition) {
     stepOnce(direction);
+    stepsTaken++;
 
-    if (_conditionCallback()) {
-      return abs(_closedPosition - _stepper.currentPosition());
+    if (stepsTaken % checkEveryNSteps == 0) {
+      if (_conditionCallback()) {
+        return abs(_closedPosition - _stepper.currentPosition());
+      }
     }
   }
 
-  return 0;   // reached full closure without the condition ever triggering
+  return 0;
 }
 
 void JawController::jogOpen(int steps) {
