@@ -34,7 +34,7 @@
 #define RUN_CURRENT_MA            500
 #define LOADCELL1_CAL_FACTOR      1005
 #define LOADCELL2_CAL_FACTOR      -1100
-#define LOADCELL1_THRESHOLD_G     6.2    // presence/weight threshold
+#define LOADCELL1_THRESHOLD_G     1    // presence/weight threshold
 #define LOADCELL2_THRESHOLD_G     20.0    // grip-contact threshold
 
 #define STEPS_PER_MM  10.54   // <-- X from your notes. HARD-CODED, must be calibrated for real mechanism.
@@ -147,7 +147,7 @@ void setup() {
 // ------------------------------------------------------------
 void loop() {
   // --- 1. Wait for a cinnamon stick to be placed ---
-  oledMessage("Place the", "cinnamon", 1);
+  oledMessage("Place the", "cinnamon", 2);
   Serial.println("Waiting for cinnamon placement...");
 
   while (!loadCell1.load_on_cell()) {
@@ -158,13 +158,13 @@ void loop() {
 
   // --- 2. Let it settle before taking the real weight reading ---
   delay(1000);
-  float weight = loadCell1.load_value() - 5.18;
+  float weight = loadCell1.load_value();
   Serial.print("Weight: ");
   Serial.print(weight, 3);
   Serial.println(" g");
 
   // --- 3. Close the jaw until it touches the cinnamon (grip sensor) ---
-  oledMessage("Measuring...", "", 1);
+  oledMessage("Measuring...", "", 2);
   long stepsLeft = jaw.checkClose();
   Serial.print("checkClose() steps left: ");
   Serial.println(stepsLeft);
@@ -180,7 +180,7 @@ void loop() {
 
   // --- 5. Show the result ---
   oledMessage("Grade: " + grade,
-              String(weight, 2) + "g  " + String(stepsLeft) + "st",
+              String(weight, 2) + "g  " + String(diameterMM) + "mm",
               2);
   Serial.println("Result displayed.");
   delay(1000);
