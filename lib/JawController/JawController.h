@@ -56,6 +56,8 @@ class JawController {
     long getClosedPosition();
     bool isHomed();
 
+    void setSpeed(float maxSpeed, float acceleration);
+
   private:
     TMC2208Stepper _driver;
     AccelStepper   _stepper;

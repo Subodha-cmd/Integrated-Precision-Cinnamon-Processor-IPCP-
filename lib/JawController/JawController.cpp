@@ -152,3 +152,9 @@ long JawController::getClosedPosition() {
 bool JawController::isHomed() {
   return _homed;
 }
+
+void JawController::setSpeed(float maxSpeed, float acceleration) {
+  _normalMaxSpeed = maxSpeed;
+  _stepper.setMaxSpeed(_normalMaxSpeed);
+  _stepper.setAcceleration(acceleration);
+}
