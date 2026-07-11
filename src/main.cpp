@@ -32,12 +32,12 @@
 // ============================================================
 #define STEPS_BETWEEN_POSITIONS   300     // calibrated open<->closed travel
 #define RUN_CURRENT_MA            500
-#define LOADCELL1_CAL_FACTOR      1005
+#define LOADCELL1_CAL_FACTOR      1030
 #define LOADCELL2_CAL_FACTOR      -1100
 #define LOADCELL1_THRESHOLD_G     1    // presence/weight threshold
 #define LOADCELL2_THRESHOLD_G     20.0    // grip-contact threshold
 
-#define STEPS_PER_MM  10.54   // <-- X from your notes. HARD-CODED, must be calibrated for real mechanism.
+#define STEPS_PER_MM  10.134   // <-- X from your notes. HARD-CODED, must be calibrated for real mechanism.
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 bool oledReady = false;
