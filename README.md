@@ -25,3 +25,70 @@ The **Integrated Precision Cinnamon Processor (IPCP)** is a feedback-driven elec
 ---
 
 ## 🛠️ System Architecture & Hardware  
+
+
+
++-------------------+
+                  |   12V DC Supply   |
+                  +---------+---------+
+                            |
+         +------------------+------------------+
+         |                                     |
+         v                                     v
+ +---------------+                     +---------------+
+ | Buck Converter|                     | TMC2208 Driver|
+ +-------+-------+                     +-------+-------+
+         | (Regulated 5V/3.3V)                 |
+         v                                     v
+ +---------------+                     +---------------+
+ | ESP32-WROOM-32|<------------------->| NEMA 17 Stepper|
+ +---+-------+---+                     +---------------+
+     |       |
+     |       +---> [ HX711 #1 ] <---> Platform Load Cell (Mass)
+     |       +---> [ HX711 #2 ] <---> Compression Load Cell (Haptic Contact)
+     |
+     +-----------> [ OLED Display ]
+
+### Hardware Specifications
+| Parameter | Specification |
+| :--- | :--- |
+| **Microcontroller** | ESP32-WROOM-32 (Dual-Core) |
+| **Motion Actuator** | NEMA 17 Stepper Motor with Rack & Pinion |
+| **Motor Driver** | TMC2208 (StealthChop Silent Micro-stepping) |
+| **Dimension Sensing** | Compression Load Cell + 24-bit HX711 ADC (Haptic trigger) |
+| **Mass Sensing** | Platform Load Cell + 24-bit HX711 ADC |
+| **Measurement Range**| 50 mm linear travel ($D = 50 - L$) |
+| **Power Input** | 12 V DC (Onboard Buck Converter for logic levels) |
+| **Grading Standard** | SLS 81:2021 |
+
+---
+
+## 📂 Repository Structure
+
+This firmware is built using **[PlatformIO](https://platformio.org/)** for VS Code.
+
+```text
+├── .vscode/             # VS Code workspace configurations
+├── include/             # Header files (.h)
+├── lib/                 # Custom libraries and driver modules (HX711, Display, Motor)
+├── src/                 # Source code (.cpp / main firmware routines)
+├── test/                # Unit tests and hardware verification scripts
+├── .gitignore           # Git ignore rules
+└── platformio.ini       # PlatformIO project configuration & dependencies
+
+
+
+🚀 Getting Started
+Prerequisites
+Install VS Code.
+
+Install the PlatformIO IDE extension from the VS Code Marketplace.
+
+Git clone this repository:
+
+
+git clone [https://github.com/Subodha-cmd/IPCP-Firmware.git](https://github.com/Subodha-cmd/IPCP-Firmware.git)
+cd IPCP-Firmware
+
+
+Hardware Connections (Pinout Summary)PeripheralESP32 Pin / InterfaceNoteHX711 #1 (Mass)GPIO (DT / SCK)Platform weighing floorHX711 #2 (Contact)GPIO (DT / SCK)Interrupt-driven haptic stopTMC2208 DriverSTEP, DIR, ENConfigured for microsteppingOLED DisplayI2C (SDA, SCL)Real-time user feedback
