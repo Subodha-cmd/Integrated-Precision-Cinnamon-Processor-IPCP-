@@ -134,4 +134,4 @@ Sri Lanka Standards Institute — **SLS 81:2021**, Cinnamon Quill Specification.
 
 ## License
 
-*(Add your chosen license here, e.g. MIT, Apache 2.0.)*
+
